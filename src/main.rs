@@ -2,10 +2,10 @@ use mini_redis::{Command, Connection, Frame};
 use tokio::net::{TcpListener, TcpStream};
 
 use bytes::Bytes;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use dashmap::DashMap;
+use std::sync::Arc;
 
-type DB = Arc<Mutex<HashMap<String, Bytes>>>;
+type ShardedDb = Arc<DashMap<String, Bytes>>;
 
 #[tokio::main]
 async fn main() {
@@ -13,7 +13,8 @@ async fn main() {
 
     println!("Listening...");
 
-    let db = Arc::new(Mutex::new(HashMap::new()));
+    // let db = Arc::new(Mutex::new(HashMap::new()));
+    let db = Arc::new(DashMap::new());
 
     loop {
         let (socket, _) = listener.accept().await.unwrap();
@@ -27,7 +28,7 @@ async fn main() {
     }
 }
 
-async fn process(socket: TcpStream, db: DB) {
+async fn process(socket: TcpStream, db: ShardedDb) {
     use mini_redis::Command::{Get, Set};
 
     let mut connection = Connection::new(socket);
@@ -35,15 +36,15 @@ async fn process(socket: TcpStream, db: DB) {
     while let Some(frame) = connection.read_frame().await.unwrap() {
         let response = match Command::from_frame(frame).unwrap() {
             Set(cmd) => {
-                let mut db = db.lock().unwrap();
+                // let mut db = db.lock().unwrap();
                 db.insert(cmd.key().to_string(), cmd.value().clone());
 
                 Frame::Simple("OK".to_string())
             }
             Get(cmd) => {
-                let db = db.lock().unwrap();
+                // let db = db.lock().unwrap();
                 if let Some(value) = db.get(cmd.key()) {
-                    Frame::Bulk(value.clone().into())
+                    Frame::Bulk(value.clone())
                 } else {
                     Frame::Null
                 }
